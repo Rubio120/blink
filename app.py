@@ -43,7 +43,11 @@ def load_security():
 
 SECRET_KEY, ADMIN_PASSWORD, ADMIN_PASSWORD_HASH, LOCAL_SECURE_CONFIG = load_security()
 
-app = Flask(__name__)
+app = Flask(
+    __name__,
+    static_folder=os.path.join(BASE_DIR, "static"),
+    template_folder=os.path.join(BASE_DIR, "templates"),
+)
 app.secret_key = SECRET_KEY
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Lax', SESSION_COOKIE_SECURE=os.getenv('HTTPS_ONLY','0')=='1', PERMANENT_SESSION_LIFETIME=timedelta(hours=12))
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 31536000
