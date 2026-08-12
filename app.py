@@ -10,6 +10,7 @@ from urllib.parse import quote
 
 from flask import Flask, abort, flash, redirect, render_template, request, session, url_for, send_file, jsonify
 from werkzeug.security import check_password_hash, generate_password_hash
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB = os.getenv('DATABASE_PATH', os.path.join(BASE_DIR, 'reservas.db'))
@@ -43,11 +44,18 @@ def load_security():
 
 SECRET_KEY, ADMIN_PASSWORD, ADMIN_PASSWORD_HASH, LOCAL_SECURE_CONFIG = load_security()
 
-app = Flask(
-    __name__,
-    static_folder=os.path.join(BASE_DIR, "static"),
-    template_folder=os.path.join(BASE_DIR, "templates"),
+app = Flask(__name__)
+
+# Render publica la aplicación detrás de un proxy inverso.
+# ProxyFix hace que Flask respete correctamente HTTPS/Host del cliente original
+# mediante los encabezados X-Forwarded-* enviados por Render.
+app.wsgi_app = ProxyFix(
+    app.wsgi_app,
+    x_for=1,
+    x_proto=1,
+    x_host=1,
 )
+
 app.secret_key = SECRET_KEY
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Lax', SESSION_COOKIE_SECURE=os.getenv('HTTPS_ONLY','0')=='1', PERMANENT_SESSION_LIFETIME=timedelta(hours=12))
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 31536000
@@ -293,10 +301,21 @@ _login_attempts={}
 def maintenance_and_admin_guard():
     if request.endpoint != 'static':
         ensure_daily_backup()
+
+    # Protección básica contra POST administrativos provenientes de otro origen.
+    # Con ProxyFix, request.host_url refleja correctamente el HTTPS público de Render.
     if request.method == 'POST' and request.path.startswith('/admin'):
-        origin=request.headers.get('Origin')
-        if origin and origin.rstrip('/') != request.host_url.rstrip('/'):
-            abort(403)
+        origin = request.headers.get('Origin')
+        if origin:
+            allowed_origin = request.host_url.rstrip('/')
+            received_origin = origin.rstrip('/')
+            if received_origin != allowed_origin:
+                app.logger.warning(
+                    'POST administrativo bloqueado: Origin=%s Host=%s',
+                    received_origin,
+                    allowed_origin,
+                )
+                abort(403)
 
 
 
