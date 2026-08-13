@@ -304,18 +304,13 @@ def maintenance_and_admin_guard():
 
     # Protección básica contra POST administrativos provenientes de otro origen.
     # Con ProxyFix, request.host_url refleja correctamente el HTTPS público de Render.
-    if request.method == 'POST' and request.path.startswith('/admin'):
-        origin = request.headers.get('Origin')
-        if origin:
-            allowed_origin = request.host_url.rstrip('/')
-            received_origin = origin.rstrip('/')
-            if received_origin != allowed_origin:
-                app.logger.warning(
-                    'POST administrativo bloqueado: Origin=%s Host=%s',
-                    received_origin,
-                    allowed_origin,
-                )
-                abort(403)
+  if request.method == 'POST' and request.path.startswith('/admin'):
+    origin = request.headers.get('Origin')
+    if origin:
+        from urllib.parse import urlparse
+        origin_host = urlparse(origin).netloc
+        if origin_host != request.host:
+            abort(403)
 
 
 
